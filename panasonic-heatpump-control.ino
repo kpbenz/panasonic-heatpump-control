@@ -46,21 +46,23 @@ Adafruit_Sensor *bmp_pressure = bmp.getPressureSensor();
 #define PANASONIC_AIRCON2_MSG_SPACE  10000
 
 // Panasonic DKE codes
-#define PANASONIC_AIRCON2_MODE_AUTO  0x00 // Operating mode
+#define PANASONIC_AIRCON2_MODE_AUTO  0x00 // Offset 13: Operating mode
 #define PANASONIC_AIRCON2_MODE_HEAT  0x40
 #define PANASONIC_AIRCON2_MODE_COOL  0x30
 #define PANASONIC_AIRCON2_MODE_DRY   0x20
 #define PANASONIC_AIRCON2_MODE_FAN   0x60
 #define PANASONIC_AIRCON2_MODE_OFF   0x00 // Power OFF
 #define PANASONIC_AIRCON2_MODE_ON    0x01
+#define PANASONIC_AIRCON2_MODE_UNKNOWN_BIT 0x08 // Unknown bit, use by remotecontrol
+
 #define PANASONIC_AIRCON2_TIMER_CNL  0x08
-#define PANASONIC_AIRCON2_FAN_AUTO   0xA0 // Fan speed
+#define PANASONIC_AIRCON2_FAN_AUTO   0xA0 // Offset 16: Fan speed 
 #define PANASONIC_AIRCON2_FAN1       0x30
 #define PANASONIC_AIRCON2_FAN2       0x40
 #define PANASONIC_AIRCON2_FAN3       0x50
 #define PANASONIC_AIRCON2_FAN4       0x60
 #define PANASONIC_AIRCON2_FAN5       0x70
-#define PANASONIC_AIRCON2_VS_AUTO    0x0F // Vertical swing
+#define PANASONIC_AIRCON2_VS_AUTO    0x0F // Offset 16: Vertical swing
 #define PANASONIC_AIRCON2_VS_UP      0x01
 #define PANASONIC_AIRCON2_VS_MUP     0x02
 #define PANASONIC_AIRCON2_VS_MIDDLE  0x03
@@ -72,6 +74,11 @@ Adafruit_Sensor *bmp_pressure = bmp.getPressureSensor();
 #define PANASONIC_AIRCON2_HS_MLEFT   0x0A
 #define PANASONIC_AIRCON2_HS_MRIGHT  0x0B
 #define PANASONIC_AIRCON2_HS_RIGHT   0x0C
+#define PANASONIC_AIRCON2_HS_UNSUPP  0x00
+
+#define PANASONIC_AIRCON2_POWERFUL   0x01 // Offset 21
+#define PANASONIC_AIRCON2_UNKNOWN1   0x89 // Offset 23
+#define PANASONIC_AIRCON2_NANOEX     0x04 // Offset 26
 
 
 // Global AC state
@@ -80,7 +87,7 @@ byte g_operatingMode = PANASONIC_AIRCON2_MODE_AUTO;
 byte g_temperature = 22;
 byte g_fanSpeed = PANASONIC_AIRCON2_FAN_AUTO;
 byte g_swingV = PANASONIC_AIRCON2_VS_AUTO;
-byte g_swingH = PANASONIC_AIRCON2_HS_AUTO;
+byte g_swingH = PANASONIC_AIRCON2_HS_UNSUPP;
 
 void printWifiStatus()
 {
@@ -213,7 +220,10 @@ void enableIROut()
 void sendPanasonicDKE(byte operatingMode, byte fanSpeed, byte temperature, byte swingV, byte swingH)
 {
   // for Panasonic A/C CS-Z25UFRAW
-  byte DKE_template[] = { 0x02, 0x20, 0xE0, 0x04, 0x00, 0x00, 0x00, 0x06, 0x02, 0x20, 0xE0, 0x04, 0x00, 0x48, 0x2E, 0x80, 0xA3, 0x0D, 0x00, 0x0E, 0xE0, 0x00, 0x00, 0x01, 0x00, 0x06, 0xA2 };
+  byte DKE_template[] = { 0x02, 0x20, 0xE0, 0x04, 0x00, 0x00, 0x00, 0x06, 
+                          0x02, 0x20, 0xE0, 0x04, 0x00, 0x48, 0x2E, 0x80,
+                          0xA3, 0x0D, 0x00, 0x0E, 0xE0, 0x00 & ~PANASONIC_AIRCON2_POWERFUL, 0x00, PANASONIC_AIRCON2_UNKNOWN1,
+                          0x00, PANASONIC_AIRCON2_NANOEX, 0x00 };
  
 
   DKE_template[13] = operatingMode;
@@ -277,7 +287,7 @@ void switchVSwitch(byte mode)
 
 void sendAcState(void)
 {
-  sendPanasonicDKE(g_operatingMode|g_onOff, g_fanSpeed, g_temperature, g_swingV, g_swingH);
+  sendPanasonicDKE(g_operatingMode|g_onOff|0x08, g_fanSpeed, g_temperature, g_swingV, g_swingH);
 }
 
 
@@ -392,7 +402,7 @@ void loop()
             // Temperature
 
             client.println("<p><b>Temperature</b>&nbsp;");
-            client.print("<input type='number' name='temperature' step='0.5' min='18.0' max='26.0' pattern='\d*\.\d' value='");
+            client.print("<input type='number' name='temperature' step='1' min='16.0' max='30.0' pattern='\d' value='");
             client.print(g_temperature);
             client.println("'>&#x2103;</p>");
             
