@@ -17,11 +17,14 @@ Arduino Due Wifi Rev
 #include <Wire.h>
 #include <Adafruit_BMP280.h>
 
-#include "arduino_secrets.h" 
+#include "arduino_secrets.h"
 ///////please enter your sensitive data in the Secret tab/arduino_secrets.h
 char ssid[] = SECRET_SSID;        // your network SSID (name)
 char pass[] = SECRET_PASS;    // your network password (use for WPA, or use as key for WEP)
 int keyIndex = 0;                 // your network key index number (needed only for WEP)
+
+char g_hostname[] = "ac-livingroom";
+char g_ac_title[] = "Livingroom";
 
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
@@ -56,7 +59,7 @@ Adafruit_Sensor *bmp_pressure = bmp.getPressureSensor();
 #define PANASONIC_AIRCON2_MODE_UNKNOWN_BIT 0x08 // Unknown bit, use by remotecontrol
 
 #define PANASONIC_AIRCON2_TIMER_CNL  0x08
-#define PANASONIC_AIRCON2_FAN_AUTO   0xA0 // Offset 16: Fan speed 
+#define PANASONIC_AIRCON2_FAN_AUTO   0xA0 // Offset 16: Fan speed
 #define PANASONIC_AIRCON2_FAN1       0x30
 #define PANASONIC_AIRCON2_FAN2       0x40
 #define PANASONIC_AIRCON2_FAN3       0x50
@@ -146,7 +149,7 @@ void setup() {
   if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
     Serial.println("Please upgrade the firmware");
   }
-  WiFi.setHostname("ac-controller");
+  WiFi.setHostname(g_hostname);
 
   // attempt to connect to WiFi network:
   while (status != WL_CONNECTED) {
@@ -165,12 +168,12 @@ void setup() {
 }
 
 
-          
+
 void mark(int time)
 {
   TCB1.CTRLA |= TCB_ENABLE_bm;        // Enable pin output
   delayMicroseconds(time);
-}     
+}
 
 void space(int time)
 {
@@ -180,11 +183,10 @@ void space(int time)
 }
 
 // Send a byte over IR
-  
 void sendIRByte(byte sendByte, int bitMarkLength, int zeroSpaceLength, int oneSpaceLength)
-{   
+{
   for (int i=0; i<8 ; i++)
-  { 
+  {
     if (sendByte & 0x01)
     {
       mark(bitMarkLength);
@@ -194,13 +196,13 @@ void sendIRByte(byte sendByte, int bitMarkLength, int zeroSpaceLength, int oneSp
     {
       mark(bitMarkLength);
       space(zeroSpaceLength);
-    }     
-  
+    }
+
     sendByte >>= 1;
   }
-} 
+}
 
-          
+
 void enableIROut()
 {
    // put your setup code here, to run once:
@@ -209,9 +211,9 @@ void enableIROut()
 
   // 38khz
   TCB1_CTRLA=TCB_CLKSEL_CLKDIV2_gc; //set clock divider, but keep output disabled.
-  TCB1_CCMP=(104<< 8) |208; 
-}      
-    
+  TCB1_CCMP=(104<< 8) |208;
+}
+
 
 
 
@@ -220,11 +222,11 @@ void enableIROut()
 void sendPanasonicDKE(byte operatingMode, byte fanSpeed, byte temperature, byte swingV, byte swingH)
 {
   // for Panasonic A/C CS-Z25UFRAW
-  byte DKE_template[] = { 0x02, 0x20, 0xE0, 0x04, 0x00, 0x00, 0x00, 0x06, 
+  byte DKE_template[] = { 0x02, 0x20, 0xE0, 0x04, 0x00, 0x00, 0x00, 0x06,
                           0x02, 0x20, 0xE0, 0x04, 0x00, 0x48, 0x2E, 0x80,
                           0xA3, 0x0D, 0x00, 0x0E, 0xE0, 0x00 & ~PANASONIC_AIRCON2_POWERFUL, 0x00, PANASONIC_AIRCON2_UNKNOWN1,
                           0x00, PANASONIC_AIRCON2_NANOEX, 0x00 };
- 
+
 
   DKE_template[13] = operatingMode;
   DKE_template[14] = temperature << 1;
@@ -237,9 +239,6 @@ void sendPanasonicDKE(byte operatingMode, byte fanSpeed, byte temperature, byte 
   {
     checksum += DKE_template[i];
   }
-
-
-  
 
   DKE_template[26] = checksum;
 
@@ -295,7 +294,7 @@ void loop()
 {
   sensors_event_t temp_event, pressure_event;
 
-  
+
 
   WiFiClient client = server.available();   // listen for incoming clients
 
@@ -319,10 +318,14 @@ void loop()
             client.println("Location: /");
             client.println();
             client.println("<HEAD>");
-            client.println("<TITLE>Heatpump Controller</TITLE>"); 
+            client.print("<TITLE>A/C-Controller ");
+            client.print(g_ac_title);
+            client.println("</TITLE>");
             client.println("</HEAD>");
             client.println("<BODY>");
-            client.println("<H1>Heatpump Controller</H1>");
+            client.print("<H1>A/C-Controller ");
+            client.print(g_ac_title);
+            client.println("</H1>");
 
             // Get the temerature
             bmp_temp->getEvent(&temp_event);
@@ -341,7 +344,7 @@ void loop()
             client.print("Air Pressure: ");
             client.print(pressure_event.pressure,1);
             client.print(" hPa<br>");
-            client.print("<form action=\"/action\">");
+            client.print("<form action=\"action\" method=\"GET\">");
 
             client.println("<p><b>Power</b>&nbsp;");
 
@@ -353,8 +356,8 @@ void loop()
             client.print(g_onOff == PANASONIC_AIRCON2_MODE_OFF ? " checked":"");
             client.println("> <label for=\"power_off\">Off</label></p>");
 
-            client.println("<p><b>Mode</b>&nbsp;");            
-            
+            client.println("<p><b>Mode</b>&nbsp;");
+
             client.print("<input type=\"radio\" name=\"mode\" id=\"mode_auto\" value=\"AUTO\"");
             client.print(g_operatingMode == PANASONIC_AIRCON2_MODE_AUTO ? " checked":"");
             client.println("> <label for=\"mode_auto\">Auto</label>&nbsp;&nbsp;");
@@ -373,8 +376,8 @@ void loop()
 
             // Vertical Swing
 
-            client.println("<p><b>Vertical Swing</b>&nbsp;");            
-            
+            client.println("<p><b>Vertical Swing</b>&nbsp;");
+
             client.print("<input type=\"radio\" name=\"vswing\" id=\"vs_auto\" value=\"AUTO\"");
             client.print(g_swingV == PANASONIC_AIRCON2_VS_AUTO ? " checked":"");
             client.println("> <label for=\"vswing\">Auto</label>&nbsp;&nbsp;");
@@ -405,8 +408,6 @@ void loop()
             client.print("<input type='number' name='temperature' step='1' min='16.0' max='30.0' pattern='\d' value='");
             client.print(g_temperature);
             client.println("'>&#x2103;</p>");
-            
-
 
             client.print("<input type=\"submit\" value=\"Send\">");
             client.print("</form");
@@ -417,12 +418,14 @@ void loop()
             client.println();
             // break out of the while loop:
             break;
-          } 
-          else 
+          }
+          else
           {    // if you got a newline, then clear currentLine:
             Serial.print("Get line: ");
             Serial.println(currentLine);
-            if (strstr(currentLine.c_str(),"GET /action") != NULL)
+            // I wish I could use regex here: 'GET .*action\?'
+            if (   strncmp(currentLine.c_str(),"GET ",4) == 0
+                && strstr(currentLine.c_str(),"action?") != NULL)
             {
               Serial.println("And action!");
               // Check if anything was changed
@@ -461,7 +464,7 @@ void loop()
             }
             currentLine = "";
           }
-        } 
+        }
         else if (c != '\r')      // if you got anything else but a carriage return character,
         {
           currentLine += c;      // add it to the end of the currentLine
